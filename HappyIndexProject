@@ -1,0 +1,72 @@
+library(ggplot2) # Data visualization
+library(caret) #data splitting, preprocessing, model training, ctree, feature selection
+library(randomForest) #randomForest, treesize
+library(dplyr) #filter, group_by, mutate, summarise, etc. 
+library(tree) #decision tree
+library(class) #knn
+library(rpart) #rpart, printcp, etc. for decision trees
+library(matrixStats) #column medians
+#library(factoextra)
+
+Happiness <- read.delim('/Users/andiedonovan/Downloads/HappinessDataCSV.csv',header=T,dec='.',sep=";", stringsAsFactors = T)
+View(Happiness)
+
+  ### PRE-PROCESSING THE DATA #####
+
+summary(Happiness)
+#Happiness rank is continous so we will transform it into a binary variable by divinding the it into two levels: Happy = Yes or No
+# Happy = Yes if score>= median & Happy= No if score <= median
+Score<-Happiness$Happiness.Score
+Happiness = Happiness %>% mutate(Happy=as.factor(ifelse(Score <= median(Score), "No", "Yes")))
+str(Happiness)
+colnames(Happiness)<-c("Country","Region", "Rank","Score", "LCI","UCI", "GDP","Family", "Health", "Freedom", "Trust", "Generosity", "Dystopia", "Happy")
+#View(Happiness)
+##New dataset with only continous explanatory variables: GDP, Family, Health, Freedom, Trust, Generosity, & Dystopia
+new.happy = Happiness %>% 
+  mutate(Happy=as.factor(ifelse(Score <= median(Score), "No", "Yes"))) %>% 
+  select(-Country, -Region, -Rank, -Score, -LCI, -UCI)
+View(new.happy)    
+
+#scaled.happy<-scale(new.happy[,1:7])
+
+#Investigate Data/ Exploratory analysis: 
+cor(new.happy[,1:7], use="complete", method="pearson")
+#highest correlation between health and gdp, makes sense
+# very low correlation between gdp and generosity; interesting
+
+
+    ### BASIC REGRESSION ###
+happy.glm<-glm(Happy~., data=new.happy, family="binomial")
+summary(happy.glm)
+happy.glm.scaled<-glm(Happy~scale(new.happy[,1:7]), data=new.happy, family="binomial")
+### easier to compare influence on Happiness when scaled
+summary(happy.glm.scaled)
+### Health has the highest coefficient
+### GDP has a rather low coefficient relative to expectations
+#error?
+
+qplot(Happy, Health, data=new.happy, geom="boxplot")
+qplot(Happy, GDP, data=new.happy, geom="boxplot")
+qplot(Happy, Family, data=new.happy, geom="boxplot")
+qplot(Happy, Freedom, data=new.happy, geom="boxplot")
+qplot(Happy, Trust, data=new.happy, geom="boxplot")
+qplot(Happy, Generosity, data=new.happy, geom="boxplot")
+qplot(Happy, Dystopia, data=new.happy, geom="boxplot")
+
+new.happy.numeric<-new.happy[,1:7]
+new.happy.numeric<-as.matrix(new.happy.numeric)
+Medians<-colMedians(new.happy.numeric, na.rm=FALSE)
+Means<-colMeans(new.happy.numeric, na.rm = FALSE)
+comp<-cbind(Medians,Means)
+comp
+min(new.happy$Family)
+max(new.happy$Family)
+### the range for family is 118.326. The mean is significantly larger than the median. This is also the case for the GDP variable, but this was to be expected. 
+
+    ### DECISION TREE #####
+
+  #We will build a decision tree with Happy as the response variable
+tree.happy = tree(Happy~., data = new.happy)
+plot(tree.happy)
+text(tree.happy, pretty = 0, cex = .8, col = "blue")
+title("Classification Tree")
