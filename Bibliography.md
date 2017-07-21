@@ -1,4 +1,4 @@
-*Sources:*
+**Sources:**
 
 Davison, Ewan. "World Happiness Report 2016 Summary Findings." What Works Wellbeing. N.p., 17 Mar. 2016. Web. 10 June 2017
 
