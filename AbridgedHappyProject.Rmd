@@ -1,0 +1,253 @@
+---
+title: "The Factors of Happiness"
+author: "Andie Donovan"
+date: "6/14/2017"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, cache=TRUE, 
+                      fig.width=6, fig.height=5,
+                      fig.align='center')
+indent1 = '    '
+indent2 = '        '
+indent3 = '            '
+
+#install.packages('ROCR')
+#install.packages('randomForest')
+#install.packages('corrplot')
+#install.packages('matrixStats')
+library(ggplot2) # Data visualization
+library(randomForest) #randomForest, treesize
+library(dplyr) #filter, group_by, mutate, summarise, etc. 
+library(tree) #decision tree
+library(class) #knn
+library(rpart) #rpart, printcp, etc. for decision trees
+library(matrixStats) #column medians
+library(ROCR) #ROCR curves
+library(corrplot)
+```
+
+*Reading the Data File and Pre-Processing:*
+
+After assigning the data to the variable "Happiness", I first checked to see if there was missing or inaccurate values. Because this was an abridged version of the data (the raw data was unavailable to the public), the data set was fairly clean and did not appear to contain any missing or incorrect values. 
+
+```{r}
+Happiness <- read.table('../input/Happiness_New.txt',header=T,dec='.',sep=",", stringsAsFactors = T)
+#View(Happiness)
+```
+
+```{r, results='hide'}
+is.na(Happiness) 
+```
+It appears that there are no missing values. 
+
+*Preprocessing the data*:
+
+```{r}
+head(Happiness) #Lets take a look at what the data set looks like
+str(Happiness) # How many observations, variables, variable class types, levels, etc.
+summary(Happiness) #Stats for all of the variables
+```
+
+The 6 main factors that I investigated: 
+*GDP
+*Family
+*Health
+*Freedom
+*Trust
+*Generosity 
+
+I created a new binary variable called "Happy" which assigned countries a value of 1 if their Happiness Score was above the world median of 5.314 and 0 if it was equal to or below the median. I put these six variables and "Happy"" into a new data frame called "happy.new" and then scaled the numerical variables of the data frame and labeled it "happy.s"
+
+```{r}
+colnames(Happiness)<-c("Country","Region", "Rank","Score", "LCI","UCI", "GDP","Family", "Health", "Freedom", "Trust", "Generosity", "Dystopia") #Renaming the columns/ variables
+
+Happiness = Happiness %>% mutate(Happy=as.factor(ifelse(Score <= median(Score), "0", "1"))) #Creating a new binary variable "Happy" based on Happiness score of each country
+
+new.happy = Happiness %>% 
+  mutate(Happy=as.factor(ifelse(Score <= median(Score), "No", "Yes"))) %>% 
+  select(-Country, -Region, -Rank, -Score, -LCI, -UCI, -Dystopia) #Creating a new data set with only the Happy variable and the 6 predictor attributes
+
+scaled<-scale(new.happy[,1:6]) #Scaled predictor variable, makes comparison easier
+happy.s<-cbind(scaled, new.happy$Happy) #add Happy variable back 
+happy.s<-as.data.frame(happy.s)
+happy.s= happy.s %>% mutate(Happy=as.factor(ifelse(V7<2, "0", "1"))) 
+happy.s=happy.s[,-7]
+```
+
+*Exploratory Analysis and Basic Data Visualization:*
+
+*Correlation Plot*
+
+To explore the relationship between the variables, I created a correlation plot using standard Pearson distance. 
+
+```{r}
+cor.happy<-cor(new.happy[,1:6], use="complete", method="pearson") 
+corrplot(cor.happy)
+```
+
+We see that GDP and Health have the highest correlation while GDP and Generosity have a slightly negative correlation. While the positive relationship between health/life expectancy and income per capita makes sense (higher income means a stable food supply and more money to spend on health care), the relationship between generosity and GDP is counter-intuitive and indicates that people living in wealthier countries may be less inclined to donate to charitable causes. Generosity also has low correlation with Family and Health. 
+
+*Means and Medians:*
+
+```{r}
+new.happy.numeric<-new.happy[,1:6]
+new.happy.numeric<-as.matrix(new.happy.numeric)
+Medians<-colMedians(new.happy.numeric, na.rm=FALSE)
+Means<-colMeans(new.happy.numeric, na.rm = FALSE)
+comp<-cbind(Medians,Means)
+comp
+min(new.happy$Family)
+max(new.happy$Family)
+```
+
+I produced a table of the means and medians to compare central tendencies and search for clues of skewed distributions. From this table, it is very easy to see that means are very close to the medians for all of the variables, giving no indication of skew. 
+
+*Boxplots:*
+
+To further illustrate the distributions I plotted the boxplots of my main six attributes for each level of the response variable: "happy" (assigned a value of 1) or "unhappy" (value of 0).
+
+I found that for countries labeled as unhappy, the distributions for health, GDP, Family, and Freedom appeared to be fairly symmetric. Conversely, the distributions for Generosity and Trust seemed skewed to the right. I hypothesized that this could be due to large differences in available income and government transparency and accountability across countries with lower population satisfaction. Unsurprisingly, the scores were lower for every variable for unhappy countries when compared to those of happy countries. The discrepencies are most noticable in the boxplots for GDP, Family, and Health. Interestingly, the plots for the variable Generosity are almost identical accrross happy and unhappy countries, indicating that perhaps Generosity is either a fairly uninfluential factor in happiness or that people are equally as generous regardless of happiness level. 
+
+```{r}
+qplot(Happy, Health, data=happy.s, geom="boxplot")
+qplot(Happy, GDP, data=happy.s, geom="boxplot") 
+qplot(Happy, Family, data=happy.s, geom="boxplot") 
+qplot(Happy, Freedom, data=happy.s, geom="boxplot")
+qplot(Happy, Trust, data=happy.s, geom="boxplot") #slight positive skew for unhappy
+qplot(Happy, Generosity, data=happy.s, geom="boxplot") #slight positive skew for unhappy
+```
+*Data Mining Techniques*
+
+*Logistic Regression*:
+
+I begin my data mining analysis by fitting a General Linear Model on the regressor Happy. This is a logistic regression since the response variable is binary and my explanatory variables are continous. 
+```{r}
+happy.glm.scaled<-glm(Happy~., data=happy.s, family="binomial") # run logistic regression on Happy variable. I will use the scaled data so that it is easier to compare between units. 
+#family= "binomial" indicates logit link function
+summary(happy.glm.scaled)
+pred.glm = predict(happy.glm.scaled, type="response") #use predict function to get our classifications from estimated probabilities (log odds)
+pred.glm=round(pred.glm, digits=2) #round probabilities
+Happiness = Happiness %>%
+mutate(predHappy=as.factor(ifelse(pred.glm<=0.5, "0", "1"))) #predicted class labels from 
+table(pred=Happiness$predHappy, true=Happiness$Happy) #Creating a confusion Matrix
+
+
+pred.glm2 <- ifelse(pred.glm > 0.5,1,0)
+MisClasErr <- mean(pred.glm2 != Happiness$Happy)
+print(paste('Accuracy Rate:',1-MisClasErr))
+
+```
+
+
+From the output, it is important to note that GDP has the highest coefficient, followed by Family and then Health, meaning that their effects on predicted happiness are estimated to be the highest. I would also like to highlight the large p-value for Generosity, which indicates that it is not a significant variable in our model and can possibly be removed. At an alpha of 0.05, we would also find trust to be insignificant. 
+
+Investigating the accuracy of this model:
+
+Out of 157 cases (countries), our model classified 72+67= 139 correctly. This is 88.535% 
+Out of the 79 "not happy" countries, the model classified 72 (91.139%) correctly. 
+Out of 78 "happy" countries, the model classified 67 (85.897%) correctly. 
+
+Accuracy Rate = (67+70) / (67+8+12+70) = 87.21%
+
+False Positive Rate (FPR): 11/ 78 (14.10256%)
+False Negative Rate (FNR): 7/ 79 ( 8.860759%)
+
+The GLM model obtained an accuracy rate of 87.12%, which is fairly accurate. We are able to visualize the performace of the model with a ROC curve, which maps the True Positive Rate against the False Positive Rate. The high corresponding area under the curve (AUC) amount of .945, indicates that the GLM is an accurate model for the data. 
+
+```{r}
+pred = prediction(pred.glm, Happiness$Happy)
+perf = performance(pred, measure="tpr", x.measure="fpr")
+plot(perf, col=2, lwd=3, main="ROC curve")
+abline(0,1)
+auc = performance(pred, "auc")@y.values
+#Calculate Area under the curve to evaluate performance of the glm model
+auc
+print(paste('AUC:',auc))
+```
+
+*Decision Tree*
+
+Next, I decided to use a decision tree to model the data. To do this I regressed Happy on the explanatory variables using the scaled data as before and plugged that into tree function. I then plotted the tree and added the labels for each branch. 
+
+```{r}
+tree.happy = tree(Happy~., data = happy.s)
+plot(tree.happy)
+text(tree.happy, pretty = 0, cex = .8, col = "blue")
+title("Classification Tree")
+summary(tree.happy)
+```
+
+From the summary of the tree, we see that there are 12 nodes and that the model has a misclassification error rate of 0.05732. 
+
+To test the accuracy of the model, I created a training and test set by randomly partitioning the data. By fitting the model on the training data, I could then compare the model's predictions with the test data (which contains the true class labels). I followed the same process as before, but this time using the training set "trainSet". I then computed the test error rate and accuracy
+
+```{r}
+set.seed(1) #setting seed for random sample
+trainSet = sample(1:nrow(happy.s), 0.75*dim(happy.s)[1]) #75% of observations set as training set
+happy.test = happy.s [-trainSet,] #the remaining 25% of observations set as the test set
+Happy.true = happy.test$Happy #true classifications of the test set
+
+#Fit the tree on training set:
+tree.training = tree(Happy~., data = happy.s, subset = trainSet)
+
+plot(tree.training)
+text(tree.training, pretty = 0, cex = .8, col = "red")
+title("Classification Tree Built on Training Set")
+
+summary(tree.training)
+
+#Computing accuracy and test error rate:
+TrainingTree.pred = predict(tree.training, happy.test, type="class")
+TrainingTree.pred
+
+error = table(TrainingTree.pred, Happy.true)
+error
+accuracy2=sum(diag(error))/sum(error) #Test accuracy rate
+print(paste('Accuracy Rate:',accuracy2))
+class_error=1-sum(diag(error))/sum(error) # Test error rate (Classification Error)
+print(paste('Test error:',class_error))
+```
+
+The model produced an accuracy rate of 82.5%, which is lower than that of the GLM model. 
+
+```{r}
+set.seed(1)
+cv = cv.tree(tree.training, FUN=prune.misclass) #10 fold cross validation (by default) to determine optimal tree complexity
+summary(cv)
+cv
+best.cv = cv$size[which.min(cv$dev)]
+best.cv
+```
+
+The optimal tree size, as determined by cross validation is 6 leaves. Therefore we will cut the tree, plot it, and extract the new confusion matrix and accuracy rate:
+
+```{r}
+prune.cv = prune.misclass (tree.training, best=best.cv) #prune our decision tree built on the training set
+plot(prune.cv)
+text(prune.cv, pretty=0, col = "blue", cex = .8)
+title("Pruned tree of size 6")
+```
+
+```{r}
+pred.cv.prune = predict(prune.cv, happy.test, type="class") 
+# confusion matrix
+err.cv.prune = table(pred.cv.prune, Happy.true)
+err.cv.prune
+acc3=sum(diag(err.cv.prune))/sum(err.cv.prune)
+1-sum(diag(err.cv.prune))/sum(err.cv.prune)
+print(paste('Accuracy Rate:',acc3))
+```
+
+The pruned tree provides the same accuracy rate as our intital model but with less complexity, and is therefore preffered. However, the GLM model still remains the most accurate model for predicting happiness. 
+
+*Conclusion*
+
+The Logistic Regression model was able to predict the correct class label "Happy" with an accuracy rate of 87.21%. This was significantly higher than the accuracy rate of the decision tree (82.5%).  Additionally, from the GLM model and the initial exploratory analysis, I concluded that GPD per capita had the highest influence on happiness level while Generosity had the lowest. 
+
+
+
+
