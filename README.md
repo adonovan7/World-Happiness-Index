@@ -1,9 +1,8 @@
 # World Happiness Index
-*Final Project for UCSB PSTAT 131 Data Mining*
+*Final Project for UCSB PSTAT 131 Data Mining* <br><br>
+**Dataset** World Happiness Report 2016
 
-**Dataset**: World Happiness Report 2016
-
-###Abstract:
+### Abstract:
 The purpose of this project is to investigate the effects of six socio-economic and economic variables on happiness within a country. I will use decision tree and logistic regression classification algorithms with the aim of producing a model that efficiently and accurately predicts whether or not a country will be classified as "happy" based on the given explanatory variables. 
 
 
