@@ -2,9 +2,6 @@
 title: "The Factors of Happiness"
 author: "Andie Donovan"
 date: "6/14/2017"
-output:
-  word_document: default
-  pdf_document: default
 ---
 *Loading Necessary Modules*
 ```{r setup, include=FALSE}
@@ -30,7 +27,7 @@ library(corrplot) #correlation plots
 
 *Reading the Data File*
 ```{r}
-df <- read.table('/Users/andiedonovan/Desktop/World_Happiness-master/Happiness_New.txt',header=T,dec='.',sep=",", stringsAsFactors = T)
+df <- read.table('~/Happiness_New.txt',header=T,dec='.',sep=",", stringsAsFactors = T)
 ```
 
 *Exploratory Analysis and Preprocessing Step*
